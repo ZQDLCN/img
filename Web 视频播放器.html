@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Video Player</title>
+    <!-- 引入Bootstrap Icons图标库（修复图标不显示问题） -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        :root {
+            /* CSS变量：便于统一修改主题 */
+            --primary-color: #0d6efd;
+            --primary-hover: #0a58ca;
+            --secondary-color: #6c757d;
+            --secondary-hover: #5c636a;
+            --success-bg: #d1e7dd;
+            --success-text: #0f5132;
+            --error-bg: #f8d7da;
+            --error-text: #842029;
+            --loading-bg: #fff3cd;
+            --loading-text: #664d03;
+            --border-color: #ced4da;
+            --light-gray: #e9ecef;
+            --dark-gray: #6c757d;
+            --shadow: 0 2px 8px rgba(0,0,0,0.08);
+            --spacing-sm: 8px;
+            --spacing-md: 15px;
+            --spacing-lg: 20px;
+            --border-radius: 4px;
+            --font-size-base: 1rem;
+            --font-size-sm: 0.9rem;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: var(--spacing-lg);
+            background-color: #f8f9fa;
+            line-height: 1.5;
+        }
+
+        header {
+            margin-bottom: var(--spacing-lg);
+            text-align: center;
+        }
+
+        h1, h3 {
+            color: #212529;
+        }
+
+        main {
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .player-container {
+            background-color: #000;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            overflow: hidden;
+            margin-bottom: var(--spacing-lg);
+            position: relative;
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+            preload: metadata; /* 仅预加载元数据，优化初始加载 */
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 15px 0;
+            align-items: center;
+        }
+
+        @media (max-width: 480px) {
+            .controls {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .url-input {
+                min-width: 100% !important;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+
+        .url-input {
+            flex-grow: 1;
+            min-width: 200px;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            font-size: var(--font-size-base);
+            transition: border-color 0.2s;
+        }
+
+        .url-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+        }
+
+        .format-hint {
+            font-size: var(--font-size-sm);
+            color: var(--dark-gray);
+            margin: -10px 0 var(--spacing-md) 0;
+            font-style: italic;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: var(--font-size-base);
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background-color: var(--secondary-hover);
+        }
+
+        .status {
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: var(--border-radius);
+            font-size: var(--font-size-sm);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .status.visible {
+            opacity: 1;
+        }
+
+        .status-success {
+            background-color: var(--success-bg);
+            color: var(--success-text);
+        }
+
+        .status-error {
+            background-color: var(--error-bg);
+            color: var(--error-text);
+        }
+
+        .status-loading {
+            background-color: var(--loading-bg);
+            color: var(--loading-text);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 2px solid #3498db;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .resource-list {
+            margin-top: var(--spacing-lg);
+            background-color: white;
+            border-radius: 8px;
+            padding: var(--spacing-md);
+            box-shadow: var(--shadow);
+        }
+
+        .resource-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-md);
+        }
+
+        .clear-btn {
+            font-size: var(--font-size-sm);
+            color: var(--primary-color);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: var(--border-radius);
+            transition: background-color 0.2s;
+        }
+
+        .clear-btn:hover {
+            background-color: rgba(13, 110, 253, 0.1);
+        }
+
+        .resource-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--light-gray);
+            transition: background-color 0.1s;
+        }
+
+        .resource-item:hover {
+            background-color: rgba(0,0,0,0.02);
+        }
+
+        .resource-item:last-child {
+            border-bottom: none;
+        }
+
+        .resource-name {
+            flex-grow: 1;
+            margin-right: 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .resource-time {
+            font-size: 0.8rem;
+            color: var(--dark-gray);
+            margin-left: 8px;
+        }
+
+        .resource-size {
+            margin-right: 15px;
+            color: var(--dark-gray);
+            font-size: var(--font-size-sm);
+            white-space: nowrap;
+        }
+
+        .play-btn, .download-btn {
+            cursor: pointer;
+            transition: color 0.2s;
+            padding: 4px;
+            border-radius: 50%;
+        }
+
+        .play-btn:hover {
+            color: var(--primary-color);
+            background-color: rgba(13, 110, 253, 0.1);
+        }
+
+        .download-btn:hover {
+            color: #198754;
+            background-color: rgba(25, 135, 84, 0.1);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: var(--spacing-lg) 0;
+            color: var(--dark-gray);
+            font-size: var(--font-size-sm);
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+    <header>
+        <h1>Web Video Player</h1>
+    </header>
+
+    <main>
+        <div class="player-container">
+            <video id="video-player" controls></video>
+        </div>
+
+        <div class="controls">
+            <input id="video-url" class="url-input" type="text" placeholder="Enter video URL (e.g., https://example.com/stream.m3u8 or video.mp4)">
+            <button id="play-button" class="btn btn-primary">
+                <i class="bi bi-play-fill"></i> Play
+            </button>
+            <button id="stop-button" class="btn btn-secondary" disabled>
+                <i class="bi bi-stop-fill"></i> Stop
+            </button>
+        </div>
+
+        <div class="format-hint">
+            Supported formats: HLS (.m3u8), MP4 (.mp4)
+        </div>
+
+        <div id="status" class="status"></div>
+
+        <section class="resource-list">
+            <div class="resource-list-header">
+                <h3>Recent Resources</h3>
+                <button id="clear-resources" class="clear-btn">Clear All</button>
+            </div>
+            <div id="resource-list"></div>
+        </section>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM元素引用
+            const videoPlayer = document.getElementById('video-player');
+            const videoUrlInput = document.getElementById('video-url');
+            const playButton = document.getElementById('play-button');
+            const stopButton = document.getElementById('stop-button');
+            const status = document.getElementById('status');
+            const resourceList = document.getElementById('resource-list');
+            const clearResourcesBtn = document.getElementById('clear-resources');
+            
+            // 变量初始化
+            let hls = null;
+            let currentUrl = '';
+            let recentResources = [];
+            
+            // 初始化：加载最近资源（处理localStorage可能的错误）
+            try {
+                recentResources = JSON.parse(localStorage.getItem('recentResources')) || [];
+            } catch (e) {
+                console.error('Failed to parse recent resources from localStorage:', e);
+                recentResources = [];
+                localStorage.setItem('recentResources', JSON.stringify(recentResources));
+            }
+            
+            // 初始状态提示
+            showStatus('Enter a video URL and click Play to start', 'info', true);
+            loadRecentResources();
+            updateButtonStates();
+            
+            // 事件监听
+            playButton.addEventListener('click', handlePlayClick);
+            stopButton.addEventListener('click', handleStopClick);
+            videoUrlInput.addEventListener('keypress', handleUrlInputKeyPress);
+            clearResourcesBtn.addEventListener('click', clearAllResources);
+            videoPlayer.addEventListener('ended', handleVideoEnded);
+            
+            // 键盘快捷键
+            document.addEventListener('keydown', handleKeyPress);
+            
+            // 事件处理函数
+            function handlePlayClick() {
+                const videoUrl = videoUrlInput.value.trim();
+                if (!videoUrl) {
+                    showStatus('Please enter a video URL', 'error');
+                    return;
+                }
+                
+                if (!isValidUrl(videoUrl)) {
+                    showStatus('Invalid URL format', 'error');
+                    return;
+                }
+                
+                playVideo(videoUrl);
+            }
+            
+            function handleStopClick() {
+                stopVideo();
+            }
+            
+            function handleUrlInputKeyPress(e) {
+                if (e.key === 'Enter') {
+                    playButton.click();
+                }
+            }
+            
+            function handleVideoEnded() {
+                showStatus('Video playback completed', 'success');
+            }
+            
+            function handleKeyPress(e) {
+                // 仅当没有输入框聚焦时才响应快捷键
+                if (document.activeElement.tagName === 'INPUT') return;
+                
+                switch(e.key) {
+                    case ' ': // 空格：播放/暂停
+                        e.preventDefault();
+                        if (videoPlayer.paused) {
+                            videoPlayer.play();
+                        } else {
+                            videoPlayer.pause();
+                        }
+                        break;
+                    case 'Escape': // ESC：停止播放
+                        if (currentUrl) {
+                            handleStopClick();
+                        }
+                        break;
+                }
+            }
+            
+            // 视频播放核心函数
+            function playVideo(url) {
+                showStatus('Loading video...', 'loading');
+                currentUrl = url;
+                updateButtonStates();
+                
+                // 先停止当前播放
+                stopVideo(false);
+                
+                // 检查URL类型并加载
+                if (url.includes('.m3u8')) {
+                    loadHlsVideo(url);
+                } else {
+                    loadStandardVideo(url);
+                }
+            }
+            
+            // 加载HLS视频（.m3u8）
+            function loadHlsVideo(url) {
+                if (Hls.isSupported()) {
+                    hls = new Hls({
+                        maxBufferLength: 30,
+                        maxMaxBufferLength: 60,
+                        startLevel: -1 // 自动选择适合的清晰度
+                    });
+                    
+                    hls.loadSource(url);
+                    hls.attachMedia(videoPlayer);
+                    
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        const fileName = getFileNameFromUrl(url);
+                        showStatus(`Playing: ${fileName}`, 'success');
+                        videoPlayer.play();
+                        addToRecentResources(url);
+                    });
+                    
+                    hls.on(Hls.Events.ERROR, (event, data) => {
+                        console.error('HLS Error:', data);
+                        handleHlsError(data);
+                    });
+                } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Safari原生支持HLS
+                    loadStandardVideo(url);
+                } else {
+                    showStatus('Your browser does not support HLS streaming (.m3u8)', 'error');
+                    updateButtonStates();
+                }
+            }
+            
+            // 加载标准视频（如MP4）
+            function loadStandardVideo(url) {
+                videoPlayer.src = url;
+                
+                videoPlayer.addEventListener('loadedmetadata', onVideoLoaded, { once: true });
+                videoPlayer.addEventListener('error', onVideoError, { once: true });
+                
+                function onVideoLoaded() {
+                    const fileName = getFileNameFromUrl(url);
+                    showStatus(`Playing: ${fileName}`, 'success');
+                    videoPlayer.play();
+                    addToRecentResources(url);
+                    // 尝试获取视频大小
+                    fetchFileSize(url, (size) => {
+                        updateResourceSize(url, size);
+                    });
+                }
+                
+                function onVideoError() {
+                    const errorMsg = videoPlayer.error ? videoPlayer.error.message : 'Unknown error';
+                    showStatus(`Failed to load video: ${errorMsg}`, 'error');
+                    updateButtonStates();
+                }
+            }
+            
+            // 停止视频播放
+            function stopVideo(showStatusMsg = true) {
+                if (hls) {
+                    hls.destroy();
+                    hls = null;
+                }
+                
+                videoPlayer.pause();
+                videoPlayer.src = '';
+                videoPlayer.load();
+                currentUrl = '';
+                
+                if (showStatusMsg) {
+                    showStatus('Playback stopped', 'info');
+                }
+                
+                updateButtonStates();
+            }
+            
+            // 辅助函数：处理HLS错误
+            function handleHlsError(data) {
+                if (data.fatal) {
+                    switch(data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            showStatus('Network error - retrying...', 'error');
+                            hls.startLoad(); // 重试加载
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            showStatus('Media error - recovering...', 'error');
+                            hls.recoverMediaError(); // 恢复媒体错误
+                            break;
+                        default:
+                            showStatus('Failed to load video stream', 'error');
+                            destroyHls();
+                            updateButtonStates();
+                            break;
+                    }
+                } else {
+                    showStatus(`Warning: ${data.details}`, 'warning');
+                }
+            }
+            
+            // 辅助函数：视频播放结束
+            function handleVideoEnded() {
+                showStatus('Video playback completed', 'success');
+            }
+            
+            // 辅助函数：URL输入框回车事件
+            function handleUrlInputKeyPress(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    playButton.click();
+                }
+            }
+            
+            // 辅助函数：键盘快捷键处理
+            function handleKeyPress(e) {
+                // 避免在输入框中时触发快捷键
+                if (e.target === videoUrlInput) return;
+            }
+            
+            // 辅助函数：添加到最近资源
+            function addToRecentResources(url) {
+                // 检查是否已存在（去重）
+                const existingIndex = recentResources.findIndex(item => item.url === url);
+                if (existingIndex !== -1) {
+                    recentResources.splice(existingIndex, 1);
+                }
+                
+                // 获取文件名和时间
+                const fileName = getFileNameFromUrl(url);
+                const timestamp = Date.now();
+                
+                // 添加新资源到开头
+                recentResources.unshift({
+                    url,
+                    displayName: fileName,
+                    timestamp,
+                    size: null // 初始大小为null，后续可能更新
+                });
+                
+                // 限制最多10条
+                if (recentResources.length > 10) {
+                    recentResources = recentResources.slice(0, 10);
+                }
+                
+                // 保存到localStorage
+                localStorage.setItem('recentResources', JSON.stringify(recentResources));
+                loadRecentResources();
+            }
+            
+            // 辅助函数：加载最近资源列表
+            function loadRecentResources() {
+                if (recentResources.length === 0) {
+                    resourceList.innerHTML = '<div class="empty-state">No recent resources</div>';
+                    return;
+                }
+                
+                resourceList.innerHTML = '';
+                recentResources.forEach(resource => {
+                    const item = document.createElement('div');
+                    item.className = 'resource-item';
+                    
+                    // 格式化时间
+                    const timeString = formatDate(resource.timestamp);
+                    
+                    // 资源大小显示
+                    const sizeDisplay = resource.size ? formatFileSize(resource.size) : '-';
+                    
+                    item.innerHTML = `
+                        <div class="resource-name">
+                            <span title="${resource.url}">${resource.displayName}</span>
+                            <span class="resource-time">${timeString}</span>
+                        </div>
+                        <div class="resource-size">${sizeDisplay}</div>
+                        <div class="play-btn" title="Play">
+                            <i class="bi bi-play-circle-fill"></i>
+                        </div>
+                        <div class="download-btn" title="Download">
+                            <i class="bi bi-download"></i>
+                        </div>
+                    `;
+                    
+                    // 播放按钮事件
+                    item.querySelector('.play-btn').addEventListener('click', () => {
+                        videoUrlInput.value = resource.url;
+                        playButton.click();
+                    });
+                    
+                    // 下载按钮事件
+                    item.querySelector('.download-btn').addEventListener('click', () => {
+                        downloadResource(resource.url, resource.displayName);
+                    });
+                    
+                    resourceList.appendChild(item);
+                });
+            }
+            
+            // 辅助函数：清除所有最近资源
+            function clearAllResources() {
+                if (confirm('Are you sure you want to clear all recent resources?')) {
+                    recentResources = [];
+                    localStorage.setItem('recentResources', JSON.stringify(recentResources));
+                    loadRecentResources();
+                    showStatus('Recent resources cleared', 'info');
+                }
+            }
+            
+            // 辅助函数：下载资源
+            function downloadResource(url, name) {
+                try {
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = name;
+                    document.body.appendChild(link);
+                    
+                    // 处理可能的CORS限制
+                    link.addEventListener('click', (e) => {
+                        setTimeout(() => {
+                            document.body.removeChild(link);
+                        }, 100);
+                    });
+                    
+                    link.click();
+                    showStatus(`Downloading: ${name} (may take time depending on size)`, 'info');
+                } catch (e) {
+                    console.error('Download error:', e);
+                    showStatus('Failed to start download (may be due to CORS restrictions)', 'error');
+                }
+            }
+            
+            // 辅助函数：显示状态消息
+            function showStatus(message, type, isInitial = false) {
+                status.textContent = message;
+                status.className = 'status';
+                status.classList.add(`status-${type}`);
+                status.classList.add('visible');
+                
+                // 初始状态不自动隐藏，其他状态30秒后自动隐藏
+                if (!isInitial) {
+                    clearTimeout(status.hideTimeout);
+                    status.hideTimeout = setTimeout(() => {
+                        status.classList.remove('visible');
+                    }, 30000);
+                }
+            }
+            
+            // 辅助函数：更新按钮状态
+            function updateButtonStates() {
+                const isPlaying = !!currentUrl;
+                playButton.disabled = isPlaying;
+                stopButton.disabled = !isPlaying;
+            }
+            
+            // 辅助函数：从URL获取文件名
+            function getFileNameFromUrl(url) {
+                try {
+                    const urlObj = new URL(url);
+                    const pathname = urlObj.pathname;
+                    const fileName = pathname.split('/').pop() || 'unknown-video';
+                    return fileName.length > 30 ? fileName.slice(0, 30) + '...' : fileName;
+                } catch (e) {
+                    // 处理无效URL的情况
+                    return url.split('/').pop() || 'unknown-video';
+                }
+            }
+            
+            // 辅助函数：验证URL格式
+            function isValidUrl(url) {
+                try {
+                    new URL(url);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+            
+            // 辅助函数：格式化日期
+            function formatDate(timestamp) {
+                const date = new Date(timestamp);
+                return new Intl.DateTimeFormat('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }).format(date);
+            }
+            
+            // 辅助函数：格式化文件大小
+            function formatFileSize(bytes) {
+                if (!bytes || bytes < 0) return '0 B';
+                const units = ['B', 'KB', 'MB', 'GB'];
+                let unitIndex = 0;
+                while (bytes >= 1024 && unitIndex < units.length - 1) {
+                    bytes /= 1024;
+                    unitIndex++;
+                }
+                return `${bytes.toFixed(1)} ${units[unitIndex]}`;
+            }
+            
+            // 辅助函数：获取文件大小（通过HEAD请求）
+            function fetchFileSize(url, callback) {
+                if (!isValidUrl(url)) return;
+                
+                fetch(url, { method: 'HEAD' })
+                    .then(response => {
+                        if (response.ok) {
+                            const contentLength = response.headers.get('Content-Length');
+                            if (contentLength) {
+                                callback(parseInt(contentLength, 10));
+                            }
+                        }
+                    })
+                    .catch(e => {
+                        console.log('Failed to fetch file size (may be due to CORS):', e);
+                    });
+            }
+            
+            // 辅助函数：更新资源大小
+            function updateResourceSize(url, size) {
+                const index = recentResources.findIndex(item => item.url === url);
+                if (index !== -1) {
+                    recentResources[index].size = size;
+                    localStorage.setItem('recentResources', JSON.stringify(recentResources));
+                    loadRecentResources();
+                }
+            }
+            
+            // 辅助函数：处理视频结束
+            function handleVideoEnded() {
+                showStatus('Video playback completed', 'success');
+            }
+            
+            // 辅助函数：销毁HLS实例
+            function destroyHls() {
+                if (hls) {
+                    hls.destroy();
+                    hls = null;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
